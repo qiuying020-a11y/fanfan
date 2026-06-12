@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>用户画像</title>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
+    <style>
+      body{font-family:Arial;margin:16px}
+      .chart{width:100%;height:320px}
+      .table-wrap{overflow-x:auto}
+      table{border-collapse:collapse;width:100%}
+      th,td{border:1px solid #ddd;padding:8px;text-align:left}
+      th{background:#f8fafc}
+      .vip-stat{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-top:12px}
+      .vip-item{padding:16px;background:#f8fafc;border-radius:8px;border-left:4px solid #2563eb}
+      .vip-label{font-size:12px;color:#666;margin-bottom:4px}
+      .vip-value{font-size:20px;font-weight:bold;color:#2563eb}
+    </style>
+  </head>
+  <body>
+    <link rel="stylesheet" href="/styles.css">
+    <header class="site-header">
+      <div class="site-title">用户画像</div>
+      <div class="nav small">
+        <a href="/">总览</a>
+        <a href="/stats.html">统计分析</a>
+        <a href="/model.html">模型</a>
+        <a href="/recommend.html">推荐</a>
+        <a href="/user.html">用户画像</a>
+        <a href="/rank.html">热度榜单</a>
+      </div>
+    </header>
+    <div class="layout">
+      <aside class="sidebar card">
+        <div class="small muted">用户分析维度</div>
+        <div class="small muted" style="margin-top:8px">• 年龄段偏好</div>
+        <div class="small muted" style="margin-top:4px">• 性别偏好</div>
+        <div class="small muted" style="margin-top:4px">• VIP用户行为</div>
+      </aside>
+      <main class="main">
+        <div class="card">
+          <div class="small muted">📊 年龄段偏好分析</div>
+          <div id="ageChart" class="chart"></div>
+        </div>
+        <div class="card">
+          <div class="small muted">👥 性别偏好分析</div>
+          <div id="genderChart" class="chart"></div>
+        </div>
+        <div class="card">
+          <div class="small muted">💎 VIP用户行为统计</div>
+          <div id="vipStats" class="vip-stat"></div>
+        </div>
+      </main>
+    </div>
+
+    <script>
+      async function fetchJson(u){const r=await fetch(u);return r.json();}
+      
+      function formatLabel(key) {
+        const labels = {
+          'vip_count': 'VIP用户数',
+          'avg_score': '平均评分',
+          'avg_watch': '平均观看次数',
+          'avg_spend': '人均消费(元)',
+          'watch_count': '总观看次数',
+          'score_count': '总评分数',
+          'watch_frequency': '观看频率',
+          'vip_ratio': 'VIP占比',
+          'avg_box': '平均票房',
+          'activity': '活跃度'
+        };
+        return labels[key] || key;
+      }
+
+      function formatValue(value) {
+        if (typeof value === 'number') {
+          if (value > 1000) return (value / 1000).toFixed(1) + 'k';
+          if (value < 1) return (value * 100).toFixed(1) + '%';
+          return value.toFixed(2);
+        }
+        return value;
+      }
+
+      async function run(){
+        // 年龄段偏好
+        const age = await fetchJson('/api/user/age_prefer');
+        const ageData = age.data || [];
+        echarts.init(document.getElementById('ageChart')).setOption({
+          tooltip:{trigger:'axis'},
+          xAxis:{type:'category',data:ageData.map(d=>d.age_group)},
+          yAxis:{type:'value',name:'偏好类型数'},
+          series:[{
+            type:'bar',
+            data:ageData.map(d=>d.top_types.length),
+            itemStyle:{color:new echarts.graphic.LinearGradient(0, 0, 0, 1, [{offset: 0, color: '#2563eb'}, {offset: 1, color: '#93c5fd'}])}
+          }]
+        });
+
+        // 性别偏好
+        const gender = await fetchJson('/api/user/gender_prefer');
+        const genderData = gender.data || [];
+        echarts.init(document.getElementById('genderChart')).setOption({
+          tooltip:{trigger:'item'},
+          legend:{bottom:'5%'},
+          series:[{
+            type:'pie',
+            radius:'50%',
+            data:genderData.map(d=>({name:d.gender, value:d.top_types.length})),
+            itemStyle:{borderRadius:8}
+          }]
+        });
+
+        // VIP行为统计
+        const vip = await fetchJson('/api/user/vip_behavior');
+        const vipData = vip.data || [];
+        const vipHtml = vipData.map(item => {
+          let label = item.behavior_type || item.key || item.label || '数据';
+          let value = item.count || item.value || item.score || '-';
+          return `<div class="vip-item"><div class="vip-label">${label}</div><div class="vip-value">${value.toLocaleString()}</div></div>`;
+        }).join('');
+        document.getElementById('vipStats').innerHTML = vipHtml || '<div class="small muted">暂无VIP行为数据</div>';
+      }
+      
+      run().catch(e=>console.error(e));
+    </script>
+  </body>
+</html>

@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>电影数据分析可视化</title>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
+    <style>
+      body { font-family: Arial, sans-serif; margin: 16px; }
+      #charts { display: flex; gap: 16px; flex-wrap: wrap; }
+      .chart { width: 600px; height: 400px; border: 1px solid #eee; padding: 8px; }
+    </style>
+  </head>
+  <body>
+    <link rel="stylesheet" href="/styles.css">
+    <header class="site-header">
+      <div class="site-title">电影数据分析与可视化平台</div>
+      <div class="nav small">
+        <a href="/">总览</a>
+        <a href="/stats.html">统计分析</a>
+        <a href="/model.html">模型</a>
+        <a href="/recommend.html">推荐</a>
+        <a href="/user.html">用户画像</a>
+        <a href="/rank.html">热度榜单</a>
+      </div>
+    </header>
+
+    <div class="layout">
+      <aside class="sidebar card">
+        <div class="small muted">📊 数据总览</div>
+        <div class="summary-grid" style="margin-top:12px">
+          <div class="summary-card"><h3>影片总数</h3><p id="moviesCount" style="font-size:24px;font-weight:bold;color:#2563eb">-</p></div>
+          <div class="summary-card"><h3>票房总额</h3><p id="boxCount" style="font-size:24px;font-weight:bold;color:#059669">-</p></div>
+          <div class="summary-card"><h3>行为记录</h3><p id="behaviorCount" style="font-size:24px;font-weight:bold;color:#7c3aed">-</p></div>
+        </div>
+        <div class="small muted" style="margin-top:16px">📈 关键指标</div>
+        <div id="keyMetrics" style="margin-top:12px;font-size:12px;line-height:1.8">
+          <div style="margin-bottom:8px"><strong>✓ 热门电影：</strong> <span id="hotCount">-</span> 部</div>
+          <div style="margin-bottom:8px"><strong>✓ 普通电影：</strong> <span id="normalCount">-</span> 部</div>
+          <div style="margin-bottom:8px"><strong>✓ 冷门电影：</strong> <span id="coldCount">-</span> 部</div>
+          <div style="margin-bottom:8px"><strong>✓ 影片类型：</strong> <span id="typeCount">-</span> 种</div>
+        </div>
+      </aside>
+      <main class="main">
+        <div class="card">
+          <div class="small muted">📅 年度影片发布趋势</div>
+          <div id="yearChart" style="width:100%;height:280px;margin-top:12px"></div>
+        </div>
+        <div class="card">
+          <div class="small muted">🏆 电影类型票房排行 Top 10</div>
+          <div id="typeChart" style="width:100%;height:280px;margin-top:12px"></div>
+        </div>
+        <div class="grid-2" style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+          <div class="card">
+            <div class="small muted">⭐ 评分与票房关系</div>
+            <div id="scoreChart" style="width:100%;height:280px;margin-top:12px"></div>
+          </div>
+          <div class="card">
+            <div class="small muted">🔥 热度分布</div>
+            <div id="hotChart" style="width:100%;height:280px;margin-top:12px"></div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="small muted">👥 用户行为类型分布</div>
+          <div id="behaviorChart" style="width:100%;height:280px;margin-top:12px"></div>
+        </div>
+      </main>
+    </div>
+
+
+    <script>
+      async function fetchJson(url){
+        const r = await fetch(url);
+        return r.json();
+      }
+
+      async function render(){
+        const sum = await fetchJson('/api/data/summary');
+        document.getElementById('moviesCount').innerText = sum.data.movie_count?.toLocaleString() || '-';
+        document.getElementById('boxCount').innerText = (sum.data.box_count / 10000).toFixed(0) + '万元' || '-';
+        document.getElementById('behaviorCount').innerText = sum.data.behavior_count?.toLocaleString() || '-';
+
+        // 获取冷热分布，计算关键指标
+        const hotDist = await fetchJson('/api/stat/hot_dist');
+        const hotData = hotDist.data || [];
+        hotData.forEach(d => {
+          if (d.tier === '热门') document.getElementById('hotCount').innerText = d.count;
+          if (d.tier === '普通') document.getElementById('normalCount').innerText = d.count;
+          if (d.tier === '冷门') document.getElementById('coldCount').innerText = d.count;
+        });
+
+        // 获取类型数量
+        const typeBox = await fetchJson('/api/stat/type_box');
+        document.getElementById('typeCount').innerText = (typeBox.data || []).length;
+
+        // 年度趋势
+        const years = await fetchJson('/api/stat/year_count');
+        const yearChart = echarts.init(document.getElementById('yearChart'));
+        const yearsData = years.data || [];
+        yearChart.setOption({
+          tooltip:{trigger:'axis'},
+          xAxis:{type:'category',data:yearsData.map(d=>d.release_year)},
+          yAxis:{type:'value',name:'影片数量'},
+          series:[{type:'line',data:yearsData.map(d=>d.count),smooth:true,areaStyle:{opacity:0.2},itemStyle:{color:'#3b82f6'}}]
+        });
+
+        // 类型票房
+        const types = await fetchJson('/api/stat/type_box');
+        const typeChart = echarts.init(document.getElementById('typeChart'));
+        const typesData = types.data.slice(0,10) || [];
+        typeChart.setOption({
+          tooltip:{trigger:'axis'},
+          xAxis:{type:'category',data:typesData.map(d=>d.type)},
+          yAxis:{type:'value',name:'平均票房(万元)'},
+          series:[{
+            type:'bar',
+            data:typesData.map(d=>d.avg_box),
+            itemStyle:{color:new echarts.graphic.LinearGradient(0, 0, 0, 1, [{offset: 0, color: '#059669'}, {offset: 1, color: '#86efac'}])}
+          }]
+        });
+
+        // 评分与票房关系
+        const scoreBox = await fetchJson('/api/stat/score_box');
+        const scoreChart = echarts.init(document.getElementById('scoreChart'));
+        const scoreBoxData = scoreBox.data || [];
+        scoreChart.setOption({
+          tooltip:{trigger:'item'},
+          xAxis:{type:'value',name:'评分'},
+          yAxis:{type:'value',name:'票房(万元)'},
+          series:[{type:'scatter',data:scoreBoxData.map(d=>[d.score_avg, d.avg_box]),symbolSize:8,itemStyle:{color:'#f59e0b',opacity:0.6}}]
+        });
+
+        // 热度分布
+        const hotDistData = hotDist.data || [];
+        const hotChart = echarts.init(document.getElementById('hotChart'));
+        hotChart.setOption({
+          tooltip:{trigger:'item',formatter:'{b}: {c} 部'},
+          legend:{bottom:'0%'},
+          series:[{
+            type:'pie',
+            radius:'50%',
+            data:hotDistData.map(d=>({name:d.tier, value:d.count})),
+            itemStyle:{borderRadius:8}
+          }]
+        });
+
+        // 用户行为分布
+        const behavior = await fetchJson('/api/stat/behavior_ratio');
+        const behaviorChart = echarts.init(document.getElementById('behaviorChart'));
+        const behaviorData = behavior.data || [];
+        behaviorChart.setOption({
+          tooltip:{trigger:'axis'},
+          xAxis:{type:'category',data:behaviorData.map(d=>d.behavior_type)},
+          yAxis:{type:'value',name:'行为数量'},
+          series:[{
+            type:'bar',
+            data:behaviorData.map(d=>d.count),
+            itemStyle:{color:new echarts.graphic.LinearGradient(0, 0, 0, 1, [{offset: 0, color: '#8b5cf6'}, {offset: 1, color: '#d8b4fe'}])}
+          }]
+        });
+      }
+      render().catch(e=>{ console.error(e); alert('加载失败，请查看控制台'); });
+    </script>
+  </body>
+</html>

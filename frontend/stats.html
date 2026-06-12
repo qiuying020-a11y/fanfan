@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>统计分析</title>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
+    <style>body{font-family:Arial;margin:16px} .chart{width:600px;height:400px;border:1px solid #eee;padding:8px;margin-bottom:16px}</style>
+  </head>
+  <body>
+    <link rel="stylesheet" href="/styles.css">
+    <header class="site-header">
+      <div class="site-title">统计分析</div>
+      <div class="nav small">
+        <a href="/">总览</a>
+        <a href="/stats.html">统计分析</a>
+        <a href="/model.html">模型</a>
+        <a href="/recommend.html">推荐</a>
+        <a href="/user.html">用户画像</a>
+        <a href="/rank.html">热度榜单</a>
+      </div>
+    </header>
+    <div class="layout">
+      <aside class="sidebar card">
+        <div class="small muted">统计</div>
+        <div class="small muted" style="margin-top:8px">展示年度、类型、地区等维度</div>
+      </aside>
+      <main class="main">
+        <div class="card charts-grid">
+          <div>
+            <div class="small muted">年度影片上映数量</div>
+            <div id="year" class="chart"></div>
+          </div>
+          <div>
+            <div class="small muted">类型平均票房（前20）</div>
+            <div id="type" class="chart"></div>
+          </div>
+        </div>
+        <div class="card charts-grid">
+          <div>
+            <div class="small muted">制片地区分布</div>
+            <div id="area" class="chart"></div>
+          </div>
+          <div>
+            <div class="small muted">时长与评分</div>
+            <div id="duration" class="chart"></div>
+          </div>
+        </div>
+      </main>
+    </div>
+    <script>
+      async function j(url){ const r=await fetch(url); return r.json(); }
+      async function run(){
+        const y = await j('/api/stat/year_count');
+        const yc = y.data;
+        echarts.init(document.getElementById('year')).setOption({title:{text:'年度上映数量'}, xAxis:{type:'category',data:yc.map(d=>d.release_year)}, yAxis:{type:'value'}, series:[{type:'line',data:yc.map(d=>d.count)}]});
+
+        const t = await j('/api/stat/type_box');
+        const tc = t.data.slice(0,20);
+        echarts.init(document.getElementById('type')).setOption({title:{text:'类型平均票房（前20）'}, xAxis:{type:'category',data:tc.map(d=>d.type)}, yAxis:{type:'value'}, series:[{type:'bar',data:tc.map(d=>d.avg_box)}]});
+
+        const a = await j('/api/stat/area_dist');
+        echarts.init(document.getElementById('area')).setOption({title:{text:'制片地区分布'}, series:[{type:'pie',radius:'50%',data:a.data.map(d=>({name:d.movie_area,value:d.count}))}]});
+
+        const d = await j('/api/stat/duration_score');
+        echarts.init(document.getElementById('duration')).setOption({title:{text:'时长与评分'}, xAxis:{type:'category',data:d.data.map(x=>x.dur_bin)}, yAxis:{type:'value'}, series:[{type:'bar',data:d.data.map(x=>x.avg_score)}]});
+      }
+      run().catch(e=>console.error(e));
+    </script>
+  </body>
+</html>

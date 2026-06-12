@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>模型分析</title>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
+    <style>
+      body{font-family:Arial;margin:16px}
+      .model-metric{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:12px 0}
+      .metric-card{padding:16px;background:#f8fafc;border-radius:8px;border-left:4px solid #2563eb}
+      .metric-label{font-size:12px;color:#666;margin-bottom:4px}
+      .metric-value{font-size:20px;font-weight:bold;color:#2563eb}
+      .pred-result{padding:16px;background:#f0fdf4;border:2px solid #22c55e;border-radius:8px;margin-top:12px}
+      .pred-value{font-size:24px;font-weight:bold;color:#16a34a}
+    </style>
+  </head>
+  <body>
+    <link rel="stylesheet" href="/styles.css">
+    <header class="site-header">
+      <div class="site-title">机器学习模型</div>
+      <div class="nav small">
+        <a href="/">总览</a>
+        <a href="/stats.html">统计分析</a>
+        <a href="/model.html">模型</a>
+        <a href="/recommend.html">推荐</a>
+        <a href="/user.html">用户画像</a>
+        <a href="/rank.html">热度榜单</a>
+      </div>
+    </header>
+    <div class="layout">
+      <aside class="sidebar card">
+        <div class="small muted">模型对比</div>
+        <div class="small muted" style="margin-top:8px">• 线性回归</div>
+        <div class="small muted" style="margin-top:4px">• 决策树</div>
+        <div class="small muted" style="margin-top:4px">• 随机森林</div>
+      </aside>
+      <main class="main">
+        <div class="card">
+          <h3 class="small muted">🤖 模型训练与对比</h3>
+          <button id="train" class="button" style="margin:12px 0">训练并对比三模型</button>
+          <div id="trainRes" class="small muted">点击按钮开始训练</div>
+          <div id="trainTable" style="margin-top:16px;display:none">
+            <div id="linearMetrics" class="model-metric" style="display:none">
+              <div class="metric-card">
+                <div class="metric-label">线性回归 - MAE</div>
+                <div class="metric-value" id="linearMae">-</div>
+              </div>
+              <div class="metric-card">
+                <div class="metric-label">线性回归 - MSE</div>
+                <div class="metric-value" id="linearMse">-</div>
+              </div>
+              <div class="metric-card">
+                <div class="metric-label">线性回归 - 样本预测</div>
+                <div class="metric-value" id="linearPred">-</div>
+              </div>
+            </div>
+            <div id="treeMetrics" class="model-metric" style="display:none">
+              <div class="metric-card">
+                <div class="metric-label">决策树 - MAE</div>
+                <div class="metric-value" id="treeMae">-</div>
+              </div>
+              <div class="metric-card">
+                <div class="metric-label">决策树 - MSE</div>
+                <div class="metric-value" id="treeMse">-</div>
+              </div>
+              <div class="metric-card">
+                <div class="metric-label">决策树 - 样本预测</div>
+                <div class="metric-value" id="treePred">-</div>
+              </div>
+            </div>
+            <div id="rfMetrics" class="model-metric" style="display:none">
+              <div class="metric-card">
+                <div class="metric-label">随机森林 - MAE</div>
+                <div class="metric-value" id="rfMae">-</div>
+              </div>
+              <div class="metric-card">
+                <div class="metric-label">随机森林 - MSE</div>
+                <div class="metric-value" id="rfMse">-</div>
+              </div>
+              <div class="metric-card">
+                <div class="metric-label">随机森林 - 样本预测</div>
+                <div class="metric-value" id="rfPred">-</div>
+              </div>
+            </div>
+            <div id="modelCompChart" style="width:100%;height:300px;margin-top:20px"></div>
+          </div>
+        </div>
+        <div class="card">
+          <h3 class="small muted">🎯 实时票房预测</h3>
+          <form id="predForm" style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;align-items:center;margin:12px 0">
+            <label>时长(分钟)<input name="duration" value="100" style="width:100%;padding:6px;border:1px solid #ddd" /></label>
+            <label>评分<input name="score_avg" value="7.0" style="width:100%;padding:6px;border:1px solid #ddd" /></label>
+            <label>上映年<input name="release_year" value="2022" style="width:100%;padding:6px;border:1px solid #ddd" /></label>
+            <button class="button" type="submit" style="width:100%">预测票房</button>
+          </form>
+          <div id="predRes" class="small muted">填写参数后点击预测</div>
+        </div>
+      </main>
+    </div>
+
+    <script>
+      function formatNumber(n) {
+        return (n / 10000).toFixed(2) + '万元';
+      }
+
+      document.getElementById('train').onclick = async ()=>{
+        document.getElementById('trainRes').innerText = '训练中...';
+        const r = await fetch('/api/model/all_compare', {method:'POST'});
+        const j = await r.json();
+        if (j.code === 0 && j.data) {
+          const data = j.data;
+          
+          // 线性回归
+          document.getElementById('linearMae').innerText = data.linear.mae.toFixed(0);
+          document.getElementById('linearMse').innerText = (data.linear.mse / 1e9).toFixed(2) + '(1e9)';
+          document.getElementById('linearPred').innerText = formatNumber(data.linear.sample_pred);
+          document.getElementById('linearMetrics').style.display = 'grid';
+          
+          // 决策树
+          document.getElementById('treeMae').innerText = data.tree.mae.toFixed(0);
+          document.getElementById('treeMse').innerText = (data.tree.mse / 1e9).toFixed(2) + '(1e9)';
+          document.getElementById('treePred').innerText = formatNumber(data.tree.sample_pred);
+          document.getElementById('treeMetrics').style.display = 'grid';
+          
+          // 随机森林
+          document.getElementById('rfMae').innerText = data.rf.mae.toFixed(0);
+          document.getElementById('rfMse').innerText = (data.rf.mse / 1e9).toFixed(2) + '(1e9)';
+          document.getElementById('rfPred').innerText = formatNumber(data.rf.sample_pred);
+          document.getElementById('rfMetrics').style.display = 'grid';
+          
+          // 对比图表
+          const chart = echarts.init(document.getElementById('modelCompChart'));
+          chart.setOption({
+            tooltip:{trigger:'axis'},
+            legend:{data:['MAE','MSE (÷1e9)']},
+            xAxis:{type:'category',data:['Linear','Decision Tree','Random Forest']},
+            yAxis:[{type:'value',name:'MAE'},{type:'value',name:'MSE (÷1e9)',position:'right'}],
+            series:[
+              {name:'MAE',type:'bar',data:[data.linear.mae, data.tree.mae, data.rf.mae],itemStyle:{color:'#3b82f6'}},
+              {name:'MSE (÷1e9)',type:'line',yAxisIndex:1,data:[data.linear.mse/1e9, data.tree.mse/1e9, data.rf.mse/1e9],smooth:true,itemStyle:{color:'#ef4444'}}
+            ]
+          });
+          
+          document.getElementById('trainRes').innerText = '✅ 训练完成！下面是模型性能对比结果';
+          document.getElementById('trainTable').style.display = 'block';
+        }
+      }
+
+      document.getElementById('predForm').onsubmit = async (e)=>{
+        e.preventDefault();
+        const f = new FormData(e.target);
+        const p = {
+          duration: Number(f.get('duration')), 
+          score_avg: Number(f.get('score_avg')), 
+          release_year: Number(f.get('release_year'))
+        };
+        const r = await fetch('/api/model/predict', {
+          method:'POST', 
+          headers:{'Content-Type':'application/json'}, 
+          body: JSON.stringify(p)
+        });
+        const j = await r.json();
+        if (j.code === 0 && j.data) {
+          const data = j.data;
+          const html = `
+            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px">
+              <div class="pred-result">
+                <div class="metric-label">线性回归预测</div>
+                <div class="pred-value">${formatNumber(data.linear)}</div>
+              </div>
+              <div class="pred-result">
+                <div class="metric-label">决策树预测</div>
+                <div class="pred-value">${formatNumber(data.tree)}</div>
+              </div>
+              <div class="pred-result">
+                <div class="metric-label">随机森林预测</div>
+                <div class="pred-value">${formatNumber(data.rf)}</div>
+              </div>
+            </div>
+            <div style="margin-top:12px;padding:12px;background:#fffacd;border-radius:8px;border-left:4px solid #f59e0b">
+              <strong>📊 预测参数：</strong> 时长${p.duration}分钟，评分${p.score_avg}分，上映年${p.release_year}年
+            </div>
+          `;
+          document.getElementById('predRes').innerHTML = html;
+        }
+      }
+    </script>
+  </body>
+</html>

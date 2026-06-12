@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>热度榜单</title>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
+    <style>
+      body{font-family:Arial;margin:16px}
+      .table-wrap{overflow-x:auto}
+      table{border-collapse:collapse;width:100%}
+      th,td{border:1px solid #ddd;padding:8px;text-align:left}
+      th{background:#f8fafc}
+      .chart{width:100%;height:300px;margin-top:12px}
+      .grid-2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+    </style>
+  </head>
+  <body>
+    <link rel="stylesheet" href="/styles.css">
+    <header class="site-header">
+      <div class="site-title">热度榜单分析</div>
+      <div class="nav small">
+        <a href="/">总览</a>
+        <a href="/stats.html">统计分析</a>
+        <a href="/model.html">模型</a>
+        <a href="/recommend.html">推荐</a>
+        <a href="/user.html">用户画像</a>
+        <a href="/rank.html">热度榜单</a>
+      </div>
+    </header>
+    <div class="layout">
+      <aside class="sidebar card">
+        <div class="small muted">热度分析维度</div>
+        <div class="small muted" style="margin-top:8px">• 热门电影排行</div>
+        <div class="small muted" style="margin-top:4px">• 冷热分布</div>
+        <div class="small muted" style="margin-top:4px">• 口碑失配分析</div>
+        <div class="small muted" style="margin-top:4px">• 热度衰减趋势</div>
+      </aside>
+      <main class="main">
+        <div class="card">
+          <h3 class="small muted">🔥 Top 10 热门影片</h3>
+          <div id="topTable" class="table-wrap"></div>
+        </div>
+        
+        <div class="grid-2">
+          <div class="card">
+            <h3 class="small muted">📊 电影冷热分层</h3>
+            <div id="tierChart" class="chart"></div>
+          </div>
+          <div class="card">
+            <h3 class="small muted">📈 热度年度衰减</h3>
+            <div id="decayChart" class="chart"></div>
+          </div>
+        </div>
+        
+        <div class="card">
+          <h3 class="small muted">⚠️ 口碑-票房异常分析</h3>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+            <div>
+              <h4 style="color:#ef4444">❌ 高票房低评分 (过度宣传)</h4>
+              <div id="highBoxLowScoreTable" class="table-wrap"></div>
+            </div>
+            <div>
+              <h4 style="color:#22c55e">✅ 低票房高评分 (潜力股)</h4>
+              <div id="lowBoxHighScoreTable" class="table-wrap"></div>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+
+    <script>
+      function renderTable(target, rows, columns){
+        if (!rows || rows.length === 0) {
+          document.getElementById(target).innerHTML = '<div class="small muted">暂无数据</div>';
+          return;
+        }
+        const header = columns.map(c=>`<th>${c.label}</th>`).join('');
+        const body = rows.map(item => `<tr>${columns.map(c=>`<td>${item[c.key] ?? '-'}</td>`).join('')}</tr>`).join('');
+        document.getElementById(target).innerHTML = `<table><thead><tr>${header}</tr></thead><tbody>${body}</tbody></table>`;
+      }
+
+      async function run(){
+        // Top 10 热门影片
+        const top = await (await fetch('/api/rank/hot_top?n=10')).json();
+        renderTable('topTable', top.data || [], [
+          {key:'movie_id',label:'影片ID'},
+          {key:'movie_name',label:'影片名称'},
+          {key:'hot_score',label:'热度分'},
+          {key:'box_office',label:'票房(万元)'},
+          {key:'score_avg',label:'评分'}
+        ]);
+
+        // 冷热分层饼图
+        const tier = await (await fetch('/api/rank/hot_cold_dist')).json();
+        const tierData = tier.data || [];
+        const tierChart = echarts.init(document.getElementById('tierChart'));
+        tierChart.setOption({
+          tooltip:{trigger:'item',formatter:'{b}: {c} 部'},
+          legend:{bottom:'5%'},
+          series:[{
+            type:'pie',
+            radius:'50%',
+            data:tierData.map(d=>({
+              name:d.tier || d.label || '未知',
+              value:d.count || 0,
+              itemStyle:{color:d.tier==='热门'?'#ef4444':d.tier==='普通'?'#f59e0b':'#3b82f6'}
+            }))
+          }]
+        });
+
+        // 热度衰减折线图
+        const decay = await (await fetch('/api/rank/hot_decay')).json();
+        const decayData = decay.data || [];
+        const decayChart = echarts.init(document.getElementById('decayChart'));
+        decayChart.setOption({
+          tooltip:{trigger:'axis'},
+          xAxis:{type:'category',data:decayData.map(d=>d.release_year)},
+          yAxis:{type:'value',name:'平均热度'},
+          series:[{
+            type:'line',
+            data:decayData.map(d=>d.avg_hot),
+            smooth:true,
+            areaStyle:{opacity:0.3},
+            itemStyle:{color:'#f59e0b'}
+          }]
+        });
+
+        // 口碑失配分析
+        const mismatch = await (await fetch('/api/rank/box_score_mismatch')).json();
+        renderTable('highBoxLowScoreTable', mismatch.data?.high_box_low_score || [], [
+          {key:'movie_id',label:'影片ID'},
+          {key:'movie_name',label:'影片名称'},
+          {key:'box_office',label:'票房(万元)'},
+          {key:'score_avg',label:'评分'}
+        ]);
+
+        renderTable('lowBoxHighScoreTable', mismatch.data?.low_box_high_score || [], [
+          {key:'movie_id',label:'影片ID'},
+          {key:'movie_name',label:'影片名称'},
+          {key:'box_office',label:'票房(万元)'},
+          {key:'score_avg',label:'评分'}
+        ]);
+      }
+      run().catch(e=>console.error(e));
+    </script>
+  </body>
+</html>
